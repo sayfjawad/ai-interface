@@ -21,6 +21,7 @@ import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
+import org.jetbrains.annotations.NotNull;
 
 public class MainUI {
 
@@ -33,6 +34,61 @@ public class MainUI {
     }
 
     private static void createAndShowGUI() {
+
+        Result ui = getResult();
+
+        // Initialize chat memory
+        chatMemory = TokenWindowChatMemory.withMaxTokens(300, new OpenAiTokenizer());
+
+        // Action listener for the send button
+        ui.sendButton().addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+
+                String selectedService = (String) ui.aiServiceDropdown().getSelectedItem();
+                String userPrompt = ui.promptInput().getText();
+                String apiKey = new String(ui.apiKeyInput().getPassword());
+
+                if (userPrompt.isEmpty()) {
+                    JOptionPane.showMessageDialog(ui.frame(), "Please enter a prompt.", "Warning", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
+                // Initialize the selected model based on user selection
+                switch (selectedService) {
+                    case "OpenAI":
+                        selectedModel = OpenAiChatModel.withApiKey(!apiKey.isEmpty() ? apiKey : ApiKeys.OPENAI_API_KEY);
+                        break;
+                    case "HuggingFace":
+                        selectedModel = HuggingFaceChatModel.withAccessToken(!apiKey.isEmpty() ? apiKey : ApiKeys.HF_API_KEY);
+                        break;
+                    default:
+                        JOptionPane.showMessageDialog(ui.frame(), "Invalid AI service selected.", "Error", JOptionPane.ERROR_MESSAGE);
+                        return;
+                }
+
+                // Add user message to chat memory
+                chatMemory.add(UserMessage.userMessage(userPrompt));
+
+                // Generate AI response
+                AiMessage aiResponse = selectedModel.generate(chatMemory.messages()).content();
+
+                // Add response to chat memory and update conversation output
+                chatMemory.add(aiResponse);
+                ui.conversationOutput().append("You: " + userPrompt + "\n");
+                ui.conversationOutput().append("AI: " + aiResponse.text() + "\n\n");
+
+                // Clear the prompt input
+                ui.promptInput().setText("");
+            }
+        });
+
+        // Display the frame
+        ui.frame().setVisible(true);
+    }
+
+    @NotNull
+    private static Result getResult() {
 
         JFrame frame = new JFrame("AI Service Selector");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -74,54 +130,11 @@ public class MainUI {
         JPanel bottomPanel = new JPanel();
         bottomPanel.add(sendButton);
         frame.add(bottomPanel, BorderLayout.SOUTH);
+        Result result = new Result(frame, aiServiceDropdown, apiKeyInput, promptInput, conversationOutput, sendButton);
+        return result;
+    }
 
-        // Initialize chat memory
-        chatMemory = TokenWindowChatMemory.withMaxTokens(300, new OpenAiTokenizer());
+    private record Result(JFrame frame, JComboBox<String> aiServiceDropdown, JPasswordField apiKeyInput, JTextArea promptInput, JTextArea conversationOutput, JButton sendButton) {
 
-        // Action listener for the send button
-        sendButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-
-                String selectedService = (String) aiServiceDropdown.getSelectedItem();
-                String userPrompt = promptInput.getText();
-                String apiKey = new String(apiKeyInput.getPassword());
-
-                if (userPrompt.isEmpty()) {
-                    JOptionPane.showMessageDialog(frame, "Please enter a prompt.", "Warning", JOptionPane.WARNING_MESSAGE);
-                    return;
-                }
-
-                // Initialize the selected model based on user selection
-                switch (selectedService) {
-                    case "OpenAI":
-                        selectedModel = OpenAiChatModel.withApiKey(!apiKey.isEmpty() ? apiKey : ApiKeys.OPENAI_API_KEY);
-                        break;
-                    case "HuggingFace":
-                        selectedModel = HuggingFaceChatModel.withAccessToken(!apiKey.isEmpty() ? apiKey : ApiKeys.HF_API_KEY);
-                        break;
-                    default:
-                        JOptionPane.showMessageDialog(frame, "Invalid AI service selected.", "Error", JOptionPane.ERROR_MESSAGE);
-                        return;
-                }
-
-                // Add user message to chat memory
-                chatMemory.add(UserMessage.userMessage(userPrompt));
-
-                // Generate AI response
-                AiMessage aiResponse = selectedModel.generate(chatMemory.messages()).content();
-
-                // Add response to chat memory and update conversation output
-                chatMemory.add(aiResponse);
-                conversationOutput.append("You: " + userPrompt + "\n");
-                conversationOutput.append("AI: " + aiResponse.text() + "\n\n");
-
-                // Clear the prompt input
-                promptInput.setText("");
-            }
-        });
-
-        // Display the frame
-        frame.setVisible(true);
     }
 }
